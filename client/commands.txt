@@ -1,0 +1,2 @@
+client
+sudo /usr/bin/python3 /home/comp211/Desktop/communications/hackathon_keyboard_battle/code/client/client.py
