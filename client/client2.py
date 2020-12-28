@@ -12,6 +12,7 @@ UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
 UDP_MSG_LEN = 7
 FORMAT = 'utf-8'
+TIMEOUT = 0.0125
 
 def main():
     print("client running")
@@ -42,17 +43,37 @@ def connect_to_server(srv_ip, srv_port):
         ###Send Team Name
         srv_adrs = (srv_ip,srv_port)
         print(f"connecting to server at ip: {srv_ip} port: {srv_port}")
-        client = socket(AF_INET, SOCK_STREAM)
-        client.connect(srv_adrs)
+        cnn = socket(AF_INET, SOCK_STREAM)
+        cnn.connect(srv_adrs)
         print("connected!")
         msg_bytes = struct.pack(f"! {TEAM_NAME_LEN+1}s",(TEAM_NAME+"\n").encode())
-        client.send(msg_bytes)
+        cnn.send(msg_bytes)
         ###get start/roster message
-        print(client.recv(2048).decode(FORMAT))
+        print(cnn.recv(2048).decode(FORMAT))
+        ###send chars
+        cnn.settimeout(TIMEOUT)
+        for c in "abcdefg":
+            send_char(cnn,c)
+            recv_and_print(cnn)
+
     finally:
-        time.sleep(15)
+        cnn.setblocking(True)
+        recv_and_print(cnn)
         print("closing TCP connection")
-        client.close()
+        cnn.close()
+
+def send_char(cnn, c):
+    try:
+        msg_bytes = struct.pack(f"! 1s",(""+c).encode())
+        cnn.send(msg_bytes)
+    finally:
+        return
+
+def recv_and_print(cnn):
+    try:
+        print(cnn.recv(2048).decode(FORMAT))
+    finally:
+        return
 
 if __name__ == "__main__":
     main()
