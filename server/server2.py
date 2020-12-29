@@ -60,7 +60,7 @@ class Team:
         self.score = 0
 
 def init_fields():
-    group_addrs = [[],[]]
+    group_addrs = [[],[]]#TODO: make dynamic
     group_scores = [0,0]
     client_dict = {}
     game_mode_event.clear()
@@ -112,7 +112,7 @@ def listen_for_clients(server_socket):
     #listen_port = bind_to_available_port(server_socket)
 
     server_socket.listen()
-    server_socket.settimeout(1)
+    server_socket.settimeout(1)#TODO: timeout
     print_color( COLOR_GREEN,f"[LISTENING] Server is listening on {SERVER_NAME}")
     threads = []
     while not game_mode_event.is_set():
@@ -147,8 +147,8 @@ def handle_client(cnn, addr):
     client_dict[addr] = team
     game_mode_event.wait()
     ###send start_message
-    welcome_msg = get_welcome_message() #TODO: make more efficient, maybe check len()
-    welcome_bytes = struct.pack(f"! {len(welcome_msg)}s",colorize(COLOR_SEND,welcome_msg).encode())
+    welcome_msg = colorize(COLOR_SEND,get_welcome_message()) #TODO: make more efficient, maybe check len()
+    welcome_bytes = struct.pack(f"! {len(welcome_msg)}s",welcome_msg.encode())
     cnn.send(welcome_bytes)
     while game_mode_event.is_set():
         msg = recv_letter(cnn)
@@ -156,17 +156,17 @@ def handle_client(cnn, addr):
             print_color(COLOR_DEFUALT,"got: " + msg)
             handle_message(cnn,addr,group_num,team,msg)
             #cnn.send(("Server: msg received: "+msg).encode(FORMAT))
-    msg = game_over_msg()
-    msg_bytes = struct.pack(f"! {len(msg)}s",colorize(COLOR_SEND, msg).encode())
+    msg = colorize(COLOR_SEND,game_over_msg())
+    msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
     print_color(COLOR_BLUE,msg)
     cnn.send(msg_bytes)
     cnn.close()
 
-def recv_letter(cnn):
+def recv_letter(cnn):#TODO: get whole
     msg = ""
     try:
         msg = cnn.recv(1).decode(FORMAT)
-    except:
+    except:#TODO: respond to exceptions like client disconnecting
         msg = ""
     finally:
         return msg
@@ -174,6 +174,32 @@ def recv_letter(cnn):
 
 def handle_message(cnn, addr, group, team, msg):
     team.score += 1
+
+
+def send_offers(listen_port):#TODO: need try catch akhusharmuta
+    print_color(COLOR_GREEN,"sending offers")
+    offer_sock = socket(AF_INET, SOCK_DGRAM)
+    offer_sock.bind(OFFER_ADDR)
+    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
+    while not game_mode_event.is_set():
+        offer_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))#TODO: no local host
+        time.sleep(1.0)
+    print_color(COLOR_GREEN,"all offers sent")
+    offer_sock.close()
+    # sock = socket(AF_INET, SOCK_RAW, IPPROTO_UDP)
+    # length = 8+len(data);
+    # checksum = 0
+    # udp_header = struct.pack('!HHHH', src_port, dst_port, length, checksum)
+    # sock.send(udp_header+data)
+
+def get_welcome_message():
+    msg = "Welcome to Keyboard Spamming Battle Royale.\n"
+    for group_num in range(0,2):
+        msg += f"\nGroup {group_num+1}:\n==\n"
+        for adrs in group_addrs[group_num]:
+            msg = msg + client_dict[adrs].name + "\n"
+    msg += "\nStart pressing keys on your keyboard as fast as you can!!"
+    return msg
 
 def game_over_msg():
     msg = "Game Over!\n"
@@ -192,37 +218,6 @@ def game_over_msg():
     for addr in group_addrs[winner]:
         msg = msg + "\n" + client_dict[addr].name
     return msg
-
-
-def send_offers(listen_port):
-    print_color(COLOR_GREEN,"sending offers")
-    offer_sock = socket(AF_INET, SOCK_DGRAM)
-    offer_sock.bind(OFFER_ADDR)
-    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
-    while not game_mode_event.is_set():
-        offer_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))
-        time.sleep(1.0)
-    print_color(COLOR_GREEN,"all offers sent")
-    offer_sock.close()
-
-
-
-
-    # sock = socket(AF_INET, SOCK_RAW, IPPROTO_UDP)
-    # length = 8+len(data);
-    # checksum = 0
-    # udp_header = struct.pack('!HHHH', src_port, dst_port, length, checksum)
-    # sock.send(udp_header+data)
-
-def get_welcome_message():
-    msg = "Welcome to Keyboard Spamming Battle Royale.\n"
-    for group_num in range(0,2):
-        msg += f"\nGroup {group_num+1}:\n==\n"
-        for adrs in group_addrs[group_num]:
-            msg = msg + client_dict[adrs].name + "\n"
-    msg += "\nStart pressing keys on your keyboard as fast as you can!!"
-    return msg
-
 
 
 if __name__ == "__main__":

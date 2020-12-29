@@ -16,7 +16,7 @@ UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
 UDP_MSG_LEN = 7
 FORMAT = 'utf-8'
-TIMEOUT = 0.0#0.0125
+TIMEOUT = 0.0
 
 ### COLORS ###
 COLOR_RED = "red"
@@ -51,7 +51,7 @@ def look_for_server():
         sock = socket(AF_INET, SOCK_DGRAM)
         sock.bind(CLIENT_ADDR)
         while True:
-            data, (src_ip,src_port) = sock.recvfrom(4096)
+            data, (src_ip,src_port) = sock.recvfrom(4096)#TODO: get all bytes
             if data:
                 cookie, code, srv_port = struct.unpack('!Ibh', data[:UDP_MSG_LEN])
                 #print(f"\tfrom: {(src_ip,src_port)}\n\tcookie: {cookie}\n\tcode: {code}\n\tsrv_port: {srv_port}" )
@@ -64,6 +64,18 @@ def look_for_server():
         sock.close()
         return ("bad server",0)#TODO: handle after return
 
+def connect_to_server(srv_ip, srv_port):
+    try:
+        srv_adrs = (srv_ip,srv_port)
+        cnn = socket(AF_INET, SOCK_STREAM)#TODO: filter message types?
+        cnn.connect(srv_adrs) 
+        print_color(COLOR_GREEN,"connected!")
+        return cnn
+    except Exception as e:
+        print_color(COLOR_RED,"failed to connect to server")
+        cnn.close()
+        return None
+
 def play_game(cnn):
     try:
         send_msg(cnn, TEAM_NAME+"\n")
@@ -74,29 +86,17 @@ def play_game(cnn):
             if len(c):
                 if not send_char(cnn,c):
                     break
-            recv_and_print(cnn)
+            recv_and_print(cnn)#TODO: heres the problem
+        recv_and_print(cnn)#TODO: heres the problem
     except:
         x=1
     finally:
         cnn.close()
 
 
-def connect_to_server(srv_ip, srv_port):
-    try:
-        srv_adrs = (srv_ip,srv_port)
-        cnn = socket(AF_INET, SOCK_STREAM)
-        cnn.connect(srv_adrs) #FAILS on second game
-        print_color(COLOR_GREEN,"connected!")
-        return cnn
-    except Exception as e:
-        print_color(COLOR_RED,"failed to connect to server")
-        cnn.close()
-        return None
-
-
 def get_char():
     c = ""
-    if select.select([sys.stdin],[],[],.25)[0]:
+    if select.select([sys.stdin],[],[],0.25)[0]:#TODO: try 0 timeout, need try except?
         c = sys.stdin.read(1)
     return c
 
@@ -104,7 +104,7 @@ def send_msg(cnn,msg):
     msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
     cnn.send(msg_bytes)
 
-def send_char(cnn, c):
+def send_char(cnn, c):#TODO: improve effeciency
     try:
         msg_bytes = struct.pack(f"! 1s",(""+c).encode())
         cnn.send(msg_bytes)
@@ -116,9 +116,20 @@ def send_char(cnn, c):
 
 def recv_and_print(cnn):
     try:
-        msg = cnn.recv(2048).decode(FORMAT)
-        if len(msg):
-            print_color(COLOR_YELLOW,"read from sock: "+ msg)
+        msg =""
+        while True:
+            c = cnn.recv(1).decode(FORMAT)
+            if c:
+                msg += c
+            elif len(msg):
+                print_color(COLOR_YELLOW,"read from sock: "+ msg)
+                break
+            else:
+                break
+
+        # msg = cnn.recv(4096).decode(FORMAT)
+        # if len(msg):
+        #     print_color(COLOR_YELLOW,"read from sock: "+ msg)
     finally:
         return
 
