@@ -2,6 +2,8 @@ from socket import *
 import struct
 import time
 import threading
+import tty
+import sys
 
 
 TEAM_NAME = "Gucci-Manes"
@@ -21,7 +23,7 @@ def main():
         print("client running")
         (srv_ip, srv_port) = look_for_server()
         connect_to_server(srv_ip,srv_port)
-        print(threading.enumerate())
+        #print(threading.enumerate())
         print("Game is officially over")
 
 
@@ -56,9 +58,13 @@ def connect_to_server(srv_ip, srv_port):
         print(cnn.recv(2048).decode(FORMAT))
         ###send chars
         cnn.settimeout(TIMEOUT)
-        for c in "abcdefg":
+        tty.setcbreak(sys.stdin)
+        while True:
+            c = sys.stdin.read(1)          
             send_char(cnn,c)
             recv_and_print(cnn)
+    except Exception as e:
+        print(e)
     finally:
         cnn.setblocking(True)
         recv_and_print(cnn)

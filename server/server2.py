@@ -2,6 +2,7 @@ from socket import *
 import struct
 import threading
 import time
+import random
 
 #Client Constants
 NETWORK_PREFIX = "172."
@@ -49,6 +50,7 @@ def init():
 def main():
     print("socket server running")
     while True:
+        print("New Round")
         init()
         threads = [
             threading.Thread(target=run_timer, name="TIMER_THREAD", args=()),
@@ -111,7 +113,8 @@ def handle_client(cnn, addr):
             team_name += ch
         else: break
     print("New Team: " + team_name)
-    group_num = 0
+    group_num = random.randint(0,NUM_GROUPS-1)
+    print(f"Group num: {group_num}"
     group_addrs[group_num].append(addr)
     team = Team(team_name)
     client_dict[addr] = team
@@ -166,14 +169,15 @@ def game_over_msg():
 
 def send_offers():
     print("sending offers")
+    offer_sock = socket(AF_INET, SOCK_DGRAM)
+    offer_sock.bind(OFFER_ADDR)
+    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,LISTEN_PORT)
     while not game_mode_event.is_set():
-        server_sock = socket(AF_INET, SOCK_DGRAM)
-        server_sock.bind(OFFER_ADDR)
-        msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,LISTEN_PORT)
-        #msg_bytes = "hello tbaby".encode()
-        server_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))
+        offer_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))
         time.sleep(1.0)
     print("all offers sent")
+    offer_sock.close()
+
 
 
 
