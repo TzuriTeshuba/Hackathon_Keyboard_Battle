@@ -17,6 +17,7 @@ OFFER_CODE = 0x2
 UDP_MSG_LEN = 7
 FORMAT = 'utf-8'
 TIMEOUT = 0.0
+INACTIVE_ITERS_TOLERANCE = 100000
 
 ### COLORS ###
 COLOR_RED = "red"
@@ -77,21 +78,30 @@ def connect_to_server(srv_ip, srv_port):
         return None
 
 def play_game(cnn):
+    is_game_over = False
     print_color(COLOR_GREEN, "Playing game")
     try:
         send_msg(cnn, TEAM_NAME+"\n")
         cnn.settimeout(TIMEOUT)
         tty.setcbreak(sys.stdin)
-
-        while True:
+        #sys.stdin.flush()
+        iters_without_send = 0
+        while not is_game_over:
+            if not recv_and_print(cnn):#TODO: heres the problem
+                is_game_over = True
             c = get_char()
             if len(c):
-                sent =  send_char(cnn,c)
-                if not sent:
-                    break
+                iters_without_send = 0
+                if not send_char(cnn,c):
+                    is_game_over = True
             else:
-                if not recv_and_print(cnn):#TODO: heres the problem
-                    break
+                iters_without_send += 1
+                if iters_without_send > INACTIVE_ITERS_TOLERANCE:
+                    iters_without_send = 0
+                    #print_color(COLOR_RED,f"Tolerance ({INACTIVE_ITERS_TOLERANCE})reached")
+                    if not send_char(cnn,""):
+                        is_game_over = True
+
     except Exception as e:
         print_color(COLOR_RED,"\n--------\nin play_game:\n"+str(e))
     finally:
@@ -100,7 +110,7 @@ def play_game(cnn):
 
 def get_char():
     c = ""
-    if select.select([sys.stdin],[],[],0)[0]:#TODO: try 0 timeout, need try except?
+    if select.select([sys.stdin],[],[],0)[0]:
         c = sys.stdin.read(1)
     return c
 

@@ -47,10 +47,9 @@ SERVER_NAME = gethostbyname(gethostname())
 FORMAT = 'utf-8'
 SECS_TO_WAIT = 5
 NUM_GROUPS = 2
-TIMEOUT = .0125
+TIMEOUT = 0.0#.0125
 
 group_addrs = [[],[]]
-group_scores = [0,0]
 client_dict = {}
 game_mode_event = threading.Event()
 game_over_event = threading.Event()
@@ -61,9 +60,10 @@ class Team:
         self.score = 0
 
 def init_fields():
-    group_addrs = [[],[]]#TODO: make dynamic
-    group_scores = [0,0]
-    client_dict = {}
+    global group_addrs
+    global client_dict
+    group_addrs  = [[],[]]#TODO: make dynamic
+    client_dict  = {}
     game_mode_event.clear()
     game_over_event.clear()
 
@@ -104,7 +104,7 @@ def bind_to_available_port(sock, prt):
             sock.bind((SERVER_NAME, prt))
             return prt
         except:
-            print_color(COLOR_RED,f"port {prt} taken")
+            #print_color(COLOR_RED,f"port {prt} taken")
             prt += 1
 
 def listen_for_clients(server_socket):
@@ -150,8 +150,8 @@ def handle_client(cnn, addr):
     cnn.send(welcome_bytes)
     while game_mode_event.is_set():
         msg = recv_letter(cnn)
-        if len(msg):
-            print_color(COLOR_DEFUALT,"got: " + msg)
+        if (len(msg) and ord(msg[0])):
+            print_color(COLOR_DEFUALT,f"got({len(msg)}):{ord(msg[0])}...")
             handle_message(cnn,addr,group_num,team,msg)
             #cnn.send(("Server: msg received: "+msg).encode(FORMAT))
     msg = colorize(COLOR_SEND,game_over_msg())
