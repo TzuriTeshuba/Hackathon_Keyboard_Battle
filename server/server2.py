@@ -17,12 +17,10 @@ CLIENT_PORT = 13117
 UDP_HEADER = 8
 TCP_HEADER = 20
 OFFER_PORT = 5060
-LISTEN_PORT = 5069
 UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
 SERVER_NAME = gethostbyname(gethostname())
 OFFER_ADDR = (SERVER_NAME, OFFER_PORT)
-#SERVER_ADDR = (SERVER_NAME, LISTEN_PORT)
 FORMAT = 'utf-8'
 SECS_TO_WAIT = 5
 NUM_GROUPS = 2
@@ -39,7 +37,7 @@ class Team:
         self.name = name
         self.score = 0
 
-def init():
+def init_fields():
     group_addrs = [[],[]]
     group_scores = [0,0]
     client_dict = {}
@@ -48,20 +46,25 @@ def init():
 
 
 def main():
-    print("socket server running")
-    while True:
-        print("New Round")
-        init()
-        threads = [
-            threading.Thread(target=run_timer, name="TIMER_THREAD", args=()),
-            threading.Thread(target=send_offers, name="OFFER_THREAD", args=()),
-            threading.Thread(target=listen_for_clients, name="LISTEN_THREAD", args=())
-        ]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        print("Game Is Officially Over!")
+    try:
+        while True:
+            print("---------------- SERVER RUNNING -------------")
+            init_fields()
+            server_socket = socket(AF_INET, SOCK_STREAM)
+            listen_port = bind_to_available_port(server_socket)
+            threads = [
+                threading.Thread(target=run_timer, name="TIMER_THREAD", args=()),
+                threading.Thread(target=listen_for_clients, name="LISTEN_THREAD", args=[server_socket]),
+                threading.Thread(target=send_offers, name="OFFER_THREAD", args=[listen_port])
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            print("Game Is Officially Over!")
+    except:
+        print("Exiting... OPEN THREADS:\n")
+        print(threading.enumerate())
     return 0
 
 def run_timer():
@@ -71,17 +74,19 @@ def run_timer():
     game_mode_event.clear()
     game_over_event.set()
 
-def listen_for_clients():
-    num_clients = 0;
-    server_socket = socket(AF_INET, SOCK_STREAM)
-    prt = LISTEN_PORT
+def bind_to_available_port(sock):
+    prt = 5057
     while True:
         try:
-            server_socket.bind((SERVER_NAME, prt))
-            break
+            sock.bind((SERVER_NAME, prt))
+            return prt
         except:
             print(f"port {prt} taken")
             prt += 1
+
+def listen_for_clients(server_socket):
+    num_clients = 0
+    #listen_port = bind_to_available_port(server_socket)
 
     server_socket.listen()
     server_socket.settimeout(1)
@@ -114,7 +119,7 @@ def handle_client(cnn, addr):
         else: break
     print("New Team: " + team_name)
     group_num = random.randint(0,NUM_GROUPS-1)
-    print(f"Group num: {group_num}"
+    print(f"Group num: {group_num}")
     group_addrs[group_num].append(addr)
     team = Team(team_name)
     client_dict[addr] = team
@@ -167,11 +172,11 @@ def game_over_msg():
     return msg
 
 
-def send_offers():
+def send_offers(listen_port):
     print("sending offers")
     offer_sock = socket(AF_INET, SOCK_DGRAM)
     offer_sock.bind(OFFER_ADDR)
-    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,LISTEN_PORT)
+    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
     while not game_mode_event.is_set():
         offer_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))
         time.sleep(1.0)

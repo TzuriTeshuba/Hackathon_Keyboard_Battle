@@ -1,9 +1,9 @@
 from socket import *
 import struct
 import time
-import threading
 import tty
 import sys
+import select
 
 
 TEAM_NAME = "Gucci-Manes"
@@ -16,15 +16,16 @@ UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
 UDP_MSG_LEN = 7
 FORMAT = 'utf-8'
-TIMEOUT = 0.0125
+TIMEOUT = 0.0#0.0125
 
 def main():
     while True:
-        print("client running")
+        print("--------------------- CLIENT RUNNING ---------------------------")
         (srv_ip, srv_port) = look_for_server()
-        connect_to_server(srv_ip,srv_port)
-        #print(threading.enumerate())
-        print("Game is officially over")
+        cnn = connect_to_server(srv_ip,srv_port)
+        if cnn == None:
+            continue
+        play_game(cnn)
 
 
 def look_for_server():
@@ -45,49 +46,62 @@ def look_for_server():
         sock.close()
         return ("bad server",0)
 
-def connect_to_server(srv_ip, srv_port):
+def play_game(cnn):
     try:
-        ###Send Team Name
-        srv_adrs = (srv_ip,srv_port)
-        print(f"connecting to server at ip: {srv_ip} port: {srv_port}")
-        cnn = socket(AF_INET, SOCK_STREAM)
-        cnn.connect(srv_adrs) #FAILS on second game
-        print("connected!")
         send_msg(cnn, TEAM_NAME+"\n")
-        ###get start/roster message
-        print(cnn.recv(2048).decode(FORMAT))
-        ###send chars
         cnn.settimeout(TIMEOUT)
         tty.setcbreak(sys.stdin)
         while True:
-            c = sys.stdin.read(1)          
-            send_char(cnn,c)
+            c = get_char()
+            if len(c):
+                #print(f"read: {c}")
+                if not send_char(cnn,c):
+                    break
             recv_and_print(cnn)
-    except Exception as e:
-        print(e)
+    except:
+        x=1
     finally:
-        cnn.setblocking(True)
-        recv_and_print(cnn)
-        print("closing TCP connection")
         cnn.close()
-        #cnn.detach()
-        #cnn.shutdown(SHUT_RDWR)
+
+
+def connect_to_server(srv_ip, srv_port):
+    try:
+        srv_adrs = (srv_ip,srv_port)
+        cnn = socket(AF_INET, SOCK_STREAM)
+        cnn.connect(srv_adrs) #FAILS on second game
+        print("connected!")
+        return cnn
+    except Exception as e:
+        print("failed to connect to server")
+        cnn.close()
+        return None
+
+
+def get_char():
+    c = ""
+    if select.select([sys.stdin],[],[],.25)[0]:
+        c = sys.stdin.read(1)
+    return c
 
 def send_msg(cnn,msg):
     msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
     cnn.send(msg_bytes)
 
-
 def send_char(cnn, c):
     try:
         msg_bytes = struct.pack(f"! 1s",(""+c).encode())
         cnn.send(msg_bytes)
-    finally:
-        return
+        return True
+    except Exception as e: #timeout as e:
+        print("--send failed:")
+        print(e)
+        return False
 
 def recv_and_print(cnn):
     try:
-        print(cnn.recv(2048).decode(FORMAT))
+        msg = cnn.recv(2048).decode(FORMAT)
+        if len(msg):
+            print("read from sock: "+ msg)
     finally:
         return
 
