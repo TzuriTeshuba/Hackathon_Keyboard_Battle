@@ -3,6 +3,28 @@ import struct
 import threading
 import time
 import random
+#program constants
+COLOR_RED = "red"
+COLOR_GREEN = "green"
+COLOR_YELLOW = "yellow"
+COLOR_BLUE = "blue"
+COLOR_DEFUALT = "default"
+COLOR_SEND = COLOR_YELLOW
+
+
+COLORS = {
+    COLOR_RED:"\u001b[31m",
+    COLOR_GREEN:"\u001b[32m",
+    COLOR_YELLOW:"\u001b[33m",
+    COLOR_BLUE:"\u001b[34m",
+    COLOR_DEFUALT:"\u001b[0m"
+    }
+
+def print_color(clr, msg):
+    print(COLORS[clr]+msg+COLORS[COLOR_DEFUALT])
+
+def colorize(clr, txt):
+    return COLORS[clr]+txt+COLORS[COLOR_DEFUALT]
 
 #Client Constants
 NETWORK_PREFIX = "172."
@@ -48,7 +70,7 @@ def init_fields():
 def main():
     try:
         while True:
-            print("---------------- SERVER RUNNING -------------")
+            print_color(COLOR_GREEN,"---------------- SERVER RUNNING -------------")
             init_fields()
             server_socket = socket(AF_INET, SOCK_STREAM)
             listen_port = bind_to_available_port(server_socket)
@@ -61,10 +83,11 @@ def main():
                 t.start()
             for t in threads:
                 t.join()
-            print("Game Is Officially Over!")
-    except:
-        print("Exiting... OPEN THREADS:\n")
-        print(threading.enumerate())
+            print_color(COLOR_GREEN,"Game Is Officially Over!")
+    except Exception as e:
+        print_color(COLOR_RED,"Exiting... OPEN THREADS:\n")
+        raise e
+        #print(threading.enumerate())
     return 0
 
 def run_timer():
@@ -81,7 +104,7 @@ def bind_to_available_port(sock):
             sock.bind((SERVER_NAME, prt))
             return prt
         except:
-            print(f"port {prt} taken")
+            print_color(COLOR_RED,f"port {prt} taken")
             prt += 1
 
 def listen_for_clients(server_socket):
@@ -90,7 +113,7 @@ def listen_for_clients(server_socket):
 
     server_socket.listen()
     server_socket.settimeout(1)
-    print(f"[LISTENING] Server is listening on {SERVER_NAME}")
+    print_color( COLOR_GREEN,f"[LISTENING] Server is listening on {SERVER_NAME}")
     threads = []
     while not game_mode_event.is_set():
         try:
@@ -99,7 +122,7 @@ def listen_for_clients(server_socket):
             thread = threading.Thread(target=handle_client, name=f"HANDLER_{num_clients}", args=(cnn, addr))
             threads.append(thread)
             thread.start()
-            print(f"[ACTIVE CONNECTIONS] {threading.activeCount() - 4}")
+            print_color(f"[ACTIVE CONNECTIONS] {threading.activeCount() - 4}")
         except:
             x=1
     #game_over_event.wait()
@@ -109,7 +132,7 @@ def listen_for_clients(server_socket):
 
 
 def handle_client(cnn, addr):
-    print(f"[NEW CONNECTION] {addr} connected.")
+    #print(f"[NEW CONNECTION] {addr} connected.")
     cnn.settimeout(TIMEOUT)
     team_name = ""
     while True:
@@ -117,26 +140,25 @@ def handle_client(cnn, addr):
         if ch[0] != '\n':
             team_name += ch
         else: break
-    print("New Team: " + team_name)
+    print_color(COLOR_YELLOW,"New Team: " + team_name)
     group_num = random.randint(0,NUM_GROUPS-1)
-    print(f"Group num: {group_num}")
     group_addrs[group_num].append(addr)
     team = Team(team_name)
     client_dict[addr] = team
     game_mode_event.wait()
     ###send start_message
     welcome_msg = get_welcome_message() #TODO: make more efficient, maybe check len()
-    welcome_bytes = struct.pack(f"! {len(welcome_msg)}s",welcome_msg.encode())
+    welcome_bytes = struct.pack(f"! {len(welcome_msg)}s",colorize(COLOR_SEND,welcome_msg).encode())
     cnn.send(welcome_bytes)
     while game_mode_event.is_set():
         msg = recv_letter(cnn)
         if len(msg):
-            print("got: " + msg)
+            print_color(COLOR_DEFUALT,"got: " + msg)
             handle_message(cnn,addr,group_num,team,msg)
             #cnn.send(("Server: msg received: "+msg).encode(FORMAT))
     msg = game_over_msg()
-    msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
-    print(msg)
+    msg_bytes = struct.pack(f"! {len(msg)}s",colorize(COLOR_SEND, msg).encode())
+    print_color(COLOR_BLUE,msg)
     cnn.send(msg_bytes)
     cnn.close()
 
@@ -173,14 +195,14 @@ def game_over_msg():
 
 
 def send_offers(listen_port):
-    print("sending offers")
+    print_color(COLOR_GREEN,"sending offers")
     offer_sock = socket(AF_INET, SOCK_DGRAM)
     offer_sock.bind(OFFER_ADDR)
     msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
     while not game_mode_event.is_set():
         offer_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))
         time.sleep(1.0)
-    print("all offers sent")
+    print_color(COLOR_GREEN,"all offers sent")
     offer_sock.close()
 
 
@@ -200,6 +222,7 @@ def get_welcome_message():
             msg = msg + client_dict[adrs].name + "\n"
     msg += "\nStart pressing keys on your keyboard as fast as you can!!"
     return msg
+
 
 
 if __name__ == "__main__":
