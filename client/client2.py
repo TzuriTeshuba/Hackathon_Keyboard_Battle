@@ -77,30 +77,34 @@ def connect_to_server(srv_ip, srv_port):
         return None
 
 def play_game(cnn):
+    print_color(COLOR_GREEN, "Playing game")
     try:
         send_msg(cnn, TEAM_NAME+"\n")
         cnn.settimeout(TIMEOUT)
         tty.setcbreak(sys.stdin)
+
         while True:
             c = get_char()
             if len(c):
-                if not send_char(cnn,c):
+                sent =  send_char(cnn,c)
+                if not sent:
                     break
-            recv_and_print(cnn)#TODO: heres the problem
-        recv_and_print(cnn)#TODO: heres the problem
-    except:
-        x=1
+            else:
+                if not recv_and_print(cnn):#TODO: heres the problem
+                    break
+    except Exception as e:
+        print_color(COLOR_RED,"\n--------\nin play_game:\n"+str(e))
     finally:
         cnn.close()
 
 
 def get_char():
     c = ""
-    if select.select([sys.stdin],[],[],0.25)[0]:#TODO: try 0 timeout, need try except?
+    if select.select([sys.stdin],[],[],0)[0]:#TODO: try 0 timeout, need try except?
         c = sys.stdin.read(1)
     return c
 
-def send_msg(cnn,msg):
+def send_msg(cnn,msg):#TODO: handle failure like in send_char
     msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
     cnn.send(msg_bytes)
 
@@ -110,27 +114,24 @@ def send_char(cnn, c):#TODO: improve effeciency
         cnn.send(msg_bytes)
         return True
     except Exception as e: #timeout as e:
-        print_color(COLOR_RED,"--send failed:")
-        print_color(COLOR_RED,e)
+        #print_color(COLOR_RED,"--send failed:")
+        #print_color(COLOR_RED,"\n--------\nin send_char:\n"+str(e))
         return False
 
 def recv_and_print(cnn):
     msg = ""
     try:
-        # while True:
-        #     c = cnn.recv(1).decode(FORMAT)
-        #     if c:
-        #         msg += c
-        #     elif len(msg):
-        #         print_color(COLOR_YELLOW,"read from sock: "+ msg)
-        #         break
-        #     else:
-        #         break
-        msg = cnn.recv(4096).decode(FORMAT)
+        msg_bytes = cnn.recv(4096)
+        if  msg_bytes == 0:
+            print_color(COLOR_RED,"RECV = 0")
+            return False
+        msg = msg_bytes.decode(FORMAT)       
         if len(msg):
             print_color(COLOR_YELLOW,"read from sock: "+ msg)
+        return True
+        
     finally:
-        return
+        return True
 
 if __name__ == "__main__":
     main()

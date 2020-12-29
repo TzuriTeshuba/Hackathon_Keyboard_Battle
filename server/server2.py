@@ -38,11 +38,12 @@ CLIENT_PORT = 13117
 #Server Constants
 UDP_HEADER = 8
 TCP_HEADER = 20
-OFFER_PORT = 5060
+INITIAL_OFFER_PORT = 7531
+INITIAL_LISTEN_PORT = 6421
 UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
 SERVER_NAME = gethostbyname(gethostname())
-OFFER_ADDR = (SERVER_NAME, OFFER_PORT)
+#OFFER_ADDR = (SERVER_NAME, OFFER_PORT)
 FORMAT = 'utf-8'
 SECS_TO_WAIT = 5
 NUM_GROUPS = 2
@@ -73,7 +74,7 @@ def main():
             print_color(COLOR_GREEN,"---------------- SERVER RUNNING -------------")
             init_fields()
             server_socket = socket(AF_INET, SOCK_STREAM)
-            listen_port = bind_to_available_port(server_socket)
+            listen_port = bind_to_available_port(server_socket,INITIAL_LISTEN_PORT)
             threads = [
                 threading.Thread(target=run_timer, name="TIMER_THREAD", args=()),
                 threading.Thread(target=listen_for_clients, name="LISTEN_THREAD", args=[server_socket]),
@@ -97,8 +98,7 @@ def run_timer():
     game_mode_event.clear()
     game_over_event.set()
 
-def bind_to_available_port(sock):
-    prt = 5057
+def bind_to_available_port(sock, prt):
     while True:
         try:
             sock.bind((SERVER_NAME, prt))
@@ -109,8 +109,6 @@ def bind_to_available_port(sock):
 
 def listen_for_clients(server_socket):
     num_clients = 0
-    #listen_port = bind_to_available_port(server_socket)
-
     server_socket.listen()
     server_socket.settimeout(1)#TODO: timeout
     print_color( COLOR_GREEN,f"[LISTENING] Server is listening on {SERVER_NAME}")
@@ -136,7 +134,7 @@ def handle_client(cnn, addr):
     cnn.settimeout(TIMEOUT)
     team_name = ""
     while True:
-        ch = cnn.recv(1).decode(FORMAT)
+        ch = cnn.recv(1).decode(FORMAT)#TODO:timeout handle
         if ch[0] != '\n':
             team_name += ch
         else: break
@@ -179,7 +177,7 @@ def handle_message(cnn, addr, group, team, msg):
 def send_offers(listen_port):#TODO: need try catch akhusharmuta
     print_color(COLOR_GREEN,"sending offers")
     offer_sock = socket(AF_INET, SOCK_DGRAM)
-    offer_sock.bind(OFFER_ADDR)
+    offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
     msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
     while not game_mode_event.is_set():
         offer_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))#TODO: no local host
