@@ -115,21 +115,20 @@ def send_char(cnn, c):#TODO: improve effeciency
         return False
 
 def recv_and_print(cnn):
+    msg = ""
     try:
-        msg =""
-        while True:
-            c = cnn.recv(1).decode(FORMAT)
-            if c:
-                msg += c
-            elif len(msg):
-                print_color(COLOR_YELLOW,"read from sock: "+ msg)
-                break
-            else:
-                break
-
-        # msg = cnn.recv(4096).decode(FORMAT)
-        # if len(msg):
-        #     print_color(COLOR_YELLOW,"read from sock: "+ msg)
+        # while True:
+        #     c = cnn.recv(1).decode(FORMAT)
+        #     if c:
+        #         msg += c
+        #     elif len(msg):
+        #         print_color(COLOR_YELLOW,"read from sock: "+ msg)
+        #         break
+        #     else:
+        #         break
+        msg = cnn.recv(4096).decode(FORMAT)
+        if len(msg):
+            print_color(COLOR_YELLOW,"read from sock: "+ msg)
     finally:
         return
 
