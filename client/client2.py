@@ -1,6 +1,8 @@
 from socket import *
 import struct
 import time
+import threading
+
 
 TEAM_NAME = "Gucci-Manes"
 TEAM_NAME_LEN = len(TEAM_NAME)
@@ -15,9 +17,12 @@ FORMAT = 'utf-8'
 TIMEOUT = 0.0125
 
 def main():
-    print("client running")
-    (srv_ip, srv_port) = look_for_server()
-    connect_to_server(srv_ip,srv_port)
+    while True:
+        print("client running")
+        (srv_ip, srv_port) = look_for_server()
+        connect_to_server(srv_ip,srv_port)
+        print(threading.enumerate())
+        print("Game is officially over")
 
 
 def look_for_server():
@@ -26,15 +31,15 @@ def look_for_server():
         sock.bind(CLIENT_ADDR)
         while True:
             data, (src_ip,src_port) = sock.recvfrom(4096)
-            print(f"got some data: {data}")
             if data:
                 cookie, code, srv_port = struct.unpack('!Ibh', data[:UDP_MSG_LEN])
-                print(f"\tfrom: {(src_ip,src_port)}\n\tcookie: {cookie}\n\tcode: {code}\n\tsrv_port: {srv_port}" )
+                #print(f"\tfrom: {(src_ip,src_port)}\n\tcookie: {cookie}\n\tcode: {code}\n\tsrv_port: {srv_port}" )
                 if cookie == UDP_COOKIE and code == OFFER_CODE:
+                    print("found server - closing client UDP socket")
                     sock.close()
                     return (src_ip, srv_port)
     except:
-        print("closing client UDP socket")
+        print("couldnt bind to port - closing client UDP socket")
         sock.close()
         return ("bad server",0)
 
@@ -44,10 +49,9 @@ def connect_to_server(srv_ip, srv_port):
         srv_adrs = (srv_ip,srv_port)
         print(f"connecting to server at ip: {srv_ip} port: {srv_port}")
         cnn = socket(AF_INET, SOCK_STREAM)
-        cnn.connect(srv_adrs)
+        cnn.connect(srv_adrs) #FAILS on second game
         print("connected!")
-        msg_bytes = struct.pack(f"! {TEAM_NAME_LEN+1}s",(TEAM_NAME+"\n").encode())
-        cnn.send(msg_bytes)
+        send_msg(cnn, TEAM_NAME+"\n")
         ###get start/roster message
         print(cnn.recv(2048).decode(FORMAT))
         ###send chars
@@ -55,12 +59,18 @@ def connect_to_server(srv_ip, srv_port):
         for c in "abcdefg":
             send_char(cnn,c)
             recv_and_print(cnn)
-
     finally:
         cnn.setblocking(True)
         recv_and_print(cnn)
         print("closing TCP connection")
         cnn.close()
+        #cnn.detach()
+        #cnn.shutdown(SHUT_RDWR)
+
+def send_msg(cnn,msg):
+    msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
+    cnn.send(msg_bytes)
+
 
 def send_char(cnn, c):
     try:

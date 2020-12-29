@@ -16,12 +16,12 @@ CLIENT_PORT = 13117
 UDP_HEADER = 8
 TCP_HEADER = 20
 OFFER_PORT = 5060
-LISTEN_PORT = 5064
+LISTEN_PORT = 5069
 UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
 SERVER_NAME = gethostbyname(gethostname())
 OFFER_ADDR = (SERVER_NAME, OFFER_PORT)
-SERVER_ADDR = (SERVER_NAME, LISTEN_PORT)
+#SERVER_ADDR = (SERVER_NAME, LISTEN_PORT)
 FORMAT = 'utf-8'
 SECS_TO_WAIT = 5
 NUM_GROUPS = 2
@@ -38,18 +38,31 @@ class Team:
         self.name = name
         self.score = 0
 
-def main():
-    print("socket server running")
-    if True:
-        threading.Thread(target=run_timer, args=()).start()
-        threading.Thread(target=send_offers, args=()).start()
-        threading.Thread(target=listen_for_clients, args=()).start()
-        game_over_event.wait()
-        print("Game Over!")
-
-def run_timer():
+def init():
+    group_addrs = [[],[]]
+    group_scores = [0,0]
+    client_dict = {}
     game_mode_event.clear()
     game_over_event.clear()
+
+
+def main():
+    print("socket server running")
+    while True:
+        init()
+        threads = [
+            threading.Thread(target=run_timer, name="TIMER_THREAD", args=()),
+            threading.Thread(target=send_offers, name="OFFER_THREAD", args=()),
+            threading.Thread(target=listen_for_clients, name="LISTEN_THREAD", args=())
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        print("Game Is Officially Over!")
+    return 0
+
+def run_timer():
     time.sleep(SECS_TO_WAIT)
     game_mode_event.set()
     time.sleep(SECS_TO_WAIT)
@@ -57,15 +70,36 @@ def run_timer():
     game_over_event.set()
 
 def listen_for_clients():
+    num_clients = 0;
     server_socket = socket(AF_INET, SOCK_STREAM)
-    server_socket.bind(SERVER_ADDR)
+    prt = LISTEN_PORT
+    while True:
+        try:
+            server_socket.bind((SERVER_NAME, prt))
+            break
+        except:
+            print(f"port {prt} taken")
+            prt += 1
+
     server_socket.listen()
+    server_socket.settimeout(1)
     print(f"[LISTENING] Server is listening on {SERVER_NAME}")
+    threads = []
     while not game_mode_event.is_set():
-        cnn, addr = server_socket.accept()
-        thread = threading.Thread(target=handle_client, args=(cnn, addr))
-        thread.start()
-        print(f"[ACTIVE CONNECTIONS] {threading.activeCount() - 2}")
+        try:
+            cnn, addr = server_socket.accept()
+            num_clients += 1
+            thread = threading.Thread(target=handle_client, name=f"HANDLER_{num_clients}", args=(cnn, addr))
+            threads.append(thread)
+            thread.start()
+            print(f"[ACTIVE CONNECTIONS] {threading.activeCount() - 4}")
+        except:
+            x=1
+    #game_over_event.wait()
+    for thread in threads:
+        thread.join()
+    server_socket.close()
+
 
 def handle_client(cnn, addr):
     print(f"[NEW CONNECTION] {addr} connected.")
@@ -83,26 +117,30 @@ def handle_client(cnn, addr):
     client_dict[addr] = team
     game_mode_event.wait()
     ###send start_message
-    roster_msg = get_roster_message() #TODO: make more efficient, maybe check len()
-    roster_bytes = struct.pack(f"! {len(roster_msg)}s",roster_msg.encode())
-    cnn.send(roster_bytes)
+    welcome_msg = get_welcome_message() #TODO: make more efficient, maybe check len()
+    welcome_bytes = struct.pack(f"! {len(welcome_msg)}s",welcome_msg.encode())
+    cnn.send(welcome_bytes)
     while game_mode_event.is_set():
-        msg = ""
-        try:
-            msg = cnn.recv(1).decode(FORMAT)
-            if len(msg):
-                print("got: " + msg)
-                handle_message(cnn,addr,group_num,team,msg)
-                #cnn.send(("Server: msg received: "+msg).encode(FORMAT))
-        except:
-            #print("excepted")
-            continue
-    print("here bro")
+        msg = recv_letter(cnn)
+        if len(msg):
+            print("got: " + msg)
+            handle_message(cnn,addr,group_num,team,msg)
+            #cnn.send(("Server: msg received: "+msg).encode(FORMAT))
     msg = game_over_msg()
     msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
-    print("GameOver message:\n"+msg)
+    print(msg)
     cnn.send(msg_bytes)
     cnn.close()
+
+def recv_letter(cnn):
+    msg = ""
+    try:
+        msg = cnn.recv(1).decode(FORMAT)
+    except:
+        msg = ""
+    finally:
+        return msg
+
 
 def handle_message(cnn, addr, group, team, msg):
     team.score += 1
@@ -127,14 +165,16 @@ def game_over_msg():
 
 
 def send_offers():
+    print("sending offers")
     while not game_mode_event.is_set():
         server_sock = socket(AF_INET, SOCK_DGRAM)
         server_sock.bind(OFFER_ADDR)
         msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,LISTEN_PORT)
         #msg_bytes = "hello tbaby".encode()
         server_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))
-        print("offer sent")
         time.sleep(1.0)
+    print("all offers sent")
+
 
 
     # sock = socket(AF_INET, SOCK_RAW, IPPROTO_UDP)
@@ -143,7 +183,7 @@ def send_offers():
     # udp_header = struct.pack('!HHHH', src_port, dst_port, length, checksum)
     # sock.send(udp_header+data)
 
-def get_roster_message():
+def get_welcome_message():
     msg = "Welcome to Keyboard Spamming Battle Royale.\n"
     for group_num in range(0,2):
         msg += f"\nGroup {group_num+1}:\n==\n"
