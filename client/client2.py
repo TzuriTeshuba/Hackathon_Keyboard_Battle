@@ -8,7 +8,7 @@ import select
 
 TEAM_NAME = "Not You"
 PORT = 13117
-CLIENT_NAME = "localhost"#gethostbyname(gethostname())
+CLIENT_NAME = "localhost" #gethostbyname(gethostname())#"localhost"
 CLIENT_ADDR = (CLIENT_NAME, PORT)
 UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
@@ -96,7 +96,6 @@ def play_game(cnn):
         send_msg(cnn, TEAM_NAME+"\n")
         cnn.settimeout(TIMEOUT)
         tty.setcbreak(sys.stdin)
-        #sys.stdin.flush()
         while True:
             if not recv_and_print(cnn):
                 print_color(COLOR_GREEN, "The server closed the connection, game over")
@@ -116,16 +115,16 @@ def get_char():
         c = sys.stdin.read(1)
     return c
 
-def send_msg(cnn,msg):#TODO: handle failure like in send_char
+def send_msg(cnn,msg):
     try:
         msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
         cnn.send(msg_bytes)
     except:
         return False
-def send_char(cnn, c):#TODO: improve effeciency
+
+def send_char(cnn, c):
     try:
         msg_bytes = c.encode(FORMAT)
-        #msg_bytes = struct.pack(f"! 1s",(""+c).encode())
         cnn.send(msg_bytes)
         return True
     except:
@@ -136,7 +135,7 @@ def recv_and_print(cnn):
     try:
         msg_bytes = cnn.recv(4096)
         msg = msg_bytes.decode(FORMAT)       
-        if len(msg):#got some bytes
+        if len(msg):
             print_color(COLOR_YELLOW,"read from sock:\n"+ msg)
             return True
         else:
