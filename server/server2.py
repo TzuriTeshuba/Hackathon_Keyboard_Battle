@@ -5,6 +5,7 @@ import time
 import random
 from team import Team
 from colors import *
+from exceptions import DisconnectException, NoTeamNameException
 #program constants
 
 
@@ -43,11 +44,10 @@ def init_fields():
     game_mode_event.clear()
     game_over_event.clear()
 
-
 def main():
-    try:
-        while True:
-            print_color(COLOR_GREEN,"---------------- SERVER RUNNING -------------")
+    while True:
+        try:
+            print_color(COLOR_GREEN,f"Server started, listening on IP address {SERVER_NAME}")
             init_fields()
             server_socket = socket(AF_INET, SOCK_STREAM)
             listen_port = bind_to_available_port(server_socket,INITIAL_LISTEN_PORT)
@@ -60,12 +60,25 @@ def main():
                 t.start()
             for t in threads:
                 t.join()
-            print_color(COLOR_GREEN,"Game Is Officially Over!")
-    except Exception as e:
-        print_color(COLOR_RED,"Exiting... OPEN THREADS:\n")
-        raise e
-        #print(threading.enumerate())
+            #print_color(COLOR_GREEN,"Game Is Officially Over!")
+        except Exception as e:
+            try:
+                server_socket.close()
+            except:
+                pass
+            print(f"\n----\n{e}\n-------\n")
+        finally:
+            print_color(COLOR_BLUE,str(threading.enumerate()))
     return 0
+
+
+def bind_to_available_port(sock, prt):
+    while True:
+        try:
+            sock.bind((SERVER_NAME, prt))
+            return prt
+        except:
+            prt += 1
 
 def run_timer():
     time.sleep(SECS_TO_WAIT)
@@ -74,14 +87,50 @@ def run_timer():
     game_mode_event.clear()
     game_over_event.set()
 
-def bind_to_available_port(sock, prt):
-    while True:
-        try:
-            sock.bind((SERVER_NAME, prt))
-            return prt
-        except:
-            #print_color(COLOR_RED,f"port {prt} taken")
-            prt += 1
+### For dev lab only ###
+def send_offers_dev_lab(listen_port):
+    #print_color(COLOR_GREEN,"sending offers")
+    offer_sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
+    offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
+    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
+    while not game_mode_event.is_set():
+        for i in range(0,LAST_NET_IP+1):
+            offer_sock.sendto(msg_bytes, (DEV_NET_PREFIX+str(i), CLIENT_PORT))
+        time.sleep(1.0)
+    #print_color(COLOR_GREEN,"all offers sent")
+    offer_sock.close()
+
+### broadcast for whole network ###
+def send_offers(listen_port):
+    #print_color(COLOR_GREEN,"sending offers")
+    offer_sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
+    offer_sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
+    offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
+    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
+    while not game_mode_event.is_set():
+        offer_sock.sendto(msg_bytes, ('<broadcast>', CLIENT_PORT))
+        time.sleep(1.0)
+    #print_color(COLOR_GREEN,"all offers sent")
+    offer_sock.close()
+
+
+### local host ###
+def send_offers_local(listen_port):#TODO: need try catch akhusharmuta
+    #print_color(COLOR_GREEN,"sending offers")
+    offer_sock = socket(AF_INET, SOCK_DGRAM)
+    offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
+    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
+    while not game_mode_event.is_set():
+        offer_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))#TODO: no local host
+        time.sleep(1.0)
+    #print_color(COLOR_GREEN,"all offers sent")
+    offer_sock.close()
+
+    # sock = socket(AF_INET, SOCK_RAW, IPPROTO_UDP)
+    # length = 8+len(data);
+    # checksum = 0
+    # udp_header = struct.pack('!HHHH', src_port, dst_port, length, checksum)
+    # sock.send(udp_header+data)
 
 def listen_for_clients(server_socket):
     num_clients = 0
@@ -96,7 +145,8 @@ def listen_for_clients(server_socket):
             thread = threading.Thread(target=handle_client, name=f"HANDLER_{num_clients}", args=(cnn, addr))
             threads.append(thread)
             thread.start()
-            print_color(f"[ACTIVE CONNECTIONS] {threading.activeCount() - 4}")
+            print("new handler thread")
+            #print_color(f"[ACTIVE CONNECTIONS] {threading.activeCount() - 4}")
         except:
             x=1
     #game_over_event.wait()
@@ -104,42 +154,61 @@ def listen_for_clients(server_socket):
         thread.join()
     server_socket.close()
 
-
 def handle_client(cnn, addr):
-    #print(f"[NEW CONNECTION] {addr} connected.")
-    cnn.settimeout(TIMEOUT)
+    try:
+        cnn.settimeout(TIMEOUT)
+        team_name = get_team_name(cnn)
+        group_num = random.randint(0,NUM_GROUPS-1)
+        group_addrs[group_num].append(addr)
+        team = Team(team_name)
+        client_dict[addr] = team
+        game_mode_event.wait()
+        empty_socket(cnn, team)
+        send_msg(cnn, get_welcome_message())
+        while game_mode_event.is_set():
+            msg = recv_letter(cnn)
+            if (len(msg) and ord(msg[0])):
+                #print_color(COLOR_DEFUALT,f"got: {msg}")
+                handle_message(cnn,addr,group_num,team,msg)
+        send_msg(cnn,game_over_msg())
+    except DisconnectException as e:
+        print_color(COLOR_GREEN, f"{addr} disconnected")
+    except NoTeamNameException:
+        send_msg(cnn,"You did not provide a name in time. good bye")
+    finally:
+        cnn.close()
+
+def get_team_name(cnn):
     team_name = ""
+    while not game_over_event.is_set():
+        c = recv_letter(cnn)
+        if c == None:
+            raise DisconnectException
+        elif not len(c):
+            continue
+        elif (c[0] != '\n'):
+            team_name += c
+        else:
+            return team_name
+    raise NoTeamNameException
+
+def empty_socket(cnn,team):
     while True:
-        ch = cnn.recv(1).decode(FORMAT)#TODO:timeout handle
-        if ch[0] != '\n':
-            team_name += ch
-        else: break
-    print_color(COLOR_YELLOW,"New Team: " + team_name)
-    group_num = random.randint(0,NUM_GROUPS-1)
-    group_addrs[group_num].append(addr)
-    team = Team(team_name)
-    client_dict[addr] = team
-    game_mode_event.wait()
-    ###send start_message
-    welcome_msg = colorize(COLOR_SEND,get_welcome_message()) #TODO: make more efficient, maybe check len()
-    welcome_bytes = struct.pack(f"! {len(welcome_msg)}s",welcome_msg.encode())
-    cnn.send(welcome_bytes)
-    while game_mode_event.is_set():
-        msg = recv_letter(cnn)
-        if (len(msg) and ord(msg[0])):
-            print_color(COLOR_DEFUALT,f"got({len(msg)}):{ord(msg[0])}...")
-            handle_message(cnn,addr,group_num,team,msg)
-            #cnn.send(("Server: msg received: "+msg).encode(FORMAT))
-    msg = colorize(COLOR_SEND,game_over_msg())
-    msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
-    print_color(COLOR_BLUE,msg)
-    cnn.send(msg_bytes)
-    cnn.close()
+        c = recv_letter(cnn)
+        if c == None:
+            raise DisconnectException
+        elif len(c):
+            team.num_sent_early += 1
+        else:
+            return
+
 
 def recv_letter(cnn):#TODO: get whole
     msg = ""
     try:
         msg = cnn.recv(1).decode(FORMAT)
+        if not len(msg):
+            msg = None
     except:#TODO: respond to exceptions like client disconnecting
         msg = ""
     finally:
@@ -148,36 +217,13 @@ def recv_letter(cnn):#TODO: get whole
 
 def handle_message(cnn, addr, group, team, msg):
     team.score += 1
+    team.msg += msg
 
-def send_offers_broken_up(listen_port):#TODO: need try catch akhusharmuta
-    print_color(COLOR_GREEN,"sending offers")
-    offer_sock = socket(AF_INET, SOCK_DGRAM)
-    offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
-    msg_bytes1 = struct.pack('!Ib', UDP_COOKIE ,OFFER_CODE)
-    msg_bytes2 = struct.pack('!h', listen_port)
-    while not game_mode_event.is_set():
-        offer_sock.sendto(msg_bytes1,('localhost',CLIENT_PORT))#TODO: no local host
-        offer_sock.sendto(msg_bytes2,('localhost',CLIENT_PORT))#TODO: no local host
-        time.sleep(1.0)
-    print_color(COLOR_GREEN,"all offers sent")
-    offer_sock.close()
+def send_msg(cnn,msg):
+    msg = colorize(COLOR_SEND,msg)
+    msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
+    cnn.send(msg_bytes)
 
-def send_offers(listen_port):#TODO: need try catch akhusharmuta
-    print_color(COLOR_GREEN,"sending offers")
-    offer_sock = socket(AF_INET, SOCK_DGRAM)
-    offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
-    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
-    while not game_mode_event.is_set():
-        offer_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))#TODO: no local host
-        time.sleep(1.0)
-    print_color(COLOR_GREEN,"all offers sent")
-    offer_sock.close()
-
-    # sock = socket(AF_INET, SOCK_RAW, IPPROTO_UDP)
-    # length = 8+len(data);
-    # checksum = 0
-    # udp_header = struct.pack('!HHHH', src_port, dst_port, length, checksum)
-    # sock.send(udp_header+data)
 
 def get_welcome_message():
     msg = "Welcome to Keyboard Spamming Battle Royale.\n"
