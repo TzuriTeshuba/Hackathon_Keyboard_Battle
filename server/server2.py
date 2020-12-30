@@ -95,6 +95,7 @@ def send_offers(listen_port):
     msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
     while not game_mode_event.is_set():
         for i in range(0,LAST_NET_IP+1):
+            print_color(COLOR_BLUE, f"sending to {DEV_NET_PREFIX+str(i)}, {CLIENT_PORT}")
             offer_sock.sendto(msg_bytes, (DEV_NET_PREFIX+str(i), CLIENT_PORT))
         time.sleep(1.0)
     #print_color(COLOR_GREEN,"all offers sent")
