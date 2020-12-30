@@ -89,14 +89,15 @@ def run_timer():
 
 ### For dev lab only ###
 def send_offers(listen_port):
+    BROASTCAST_IP = "172.1.255.255"
     #print_color(COLOR_GREEN,"sending offers")
     offer_sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
     offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
     msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
     while not game_mode_event.is_set():
-        for i in range(0,LAST_NET_IP+1):
-            print_color(COLOR_BLUE, f"sending to {DEV_NET_PREFIX+str(i)}, {CLIENT_PORT}")
-            offer_sock.sendto(msg_bytes, (DEV_NET_PREFIX+str(i), CLIENT_PORT))
+        #for i in range(0,LAST_NET_IP+1):
+        print_color(COLOR_BLUE, f"sending to {DEV_NET_PREFIX+str(i)}, {CLIENT_PORT}")
+        offer_sock.sendto(msg_bytes, (BROASTCAST_IP, CLIENT_PORT))
         time.sleep(1.0)
     #print_color(COLOR_GREEN,"all offers sent")
     offer_sock.close()
