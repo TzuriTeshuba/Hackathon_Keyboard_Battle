@@ -38,7 +38,6 @@ def print_color(clr, msg):
 
 def main():
     while True:
-        print_color(COLOR_GREEN,"--------------------- CLIENT RUNNING ---------------------------")
         print_color(COLOR_GREEN,"Client started, listening for offer requests...")
         (srv_ip, srv_port) = look_for_server()
         if srv_ip == None:
@@ -58,9 +57,7 @@ def try_udp_bind():
             sock.close()
             print_color(COLOR_RED,"failed udp connect. trying again...")
 
-
 def look_for_server():
-    bytes_by_addr = {}
     try:
         sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
         sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)

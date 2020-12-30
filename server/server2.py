@@ -88,7 +88,7 @@ def run_timer():
     game_over_event.set()
 
 ### For dev lab only ###
-def send_offers_dev_lab(listen_port):
+def send_offers(listen_port):
     #print_color(COLOR_GREEN,"sending offers")
     offer_sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
     offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
@@ -101,7 +101,7 @@ def send_offers_dev_lab(listen_port):
     offer_sock.close()
 
 ### broadcast for whole network ###
-def send_offers(listen_port):
+def send_offers_whole_net(listen_port):
     #print_color(COLOR_GREEN,"sending offers")
     offer_sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
     offer_sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
