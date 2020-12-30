@@ -27,7 +27,8 @@ SERVER_NAME = gethostbyname(gethostname())
 FORMAT = 'utf-8'
 SECS_TO_WAIT = 5
 NUM_GROUPS = 2
-TIMEOUT = 0.0#.0125
+TIMEOUT = 0.5
+ACCEPT_TIMEOUT = 1.0
 
 group_addrs = [[],[]]
 client_dict = {}
@@ -150,7 +151,7 @@ def send_offers_orig(listen_port):#TODO: need try catch akhusharmuta
 def listen_for_clients(server_socket):
     num_clients = 0
     server_socket.listen()
-    server_socket.settimeout(0.1)
+    server_socket.settimeout(ACCEPT_TIMEOUT)
     print_color( COLOR_GREEN,f"[LISTENING] Server is listening on {SERVER_NAME}")
     threads = []
     while not game_mode_event.is_set():
