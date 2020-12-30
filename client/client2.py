@@ -7,8 +7,6 @@ import select
 
 
 TEAM_NAME = "Gucci-Manes"
-TEAM_NAME_LEN = len(TEAM_NAME)
-HEADER = 64
 PORT = 13117
 CLIENT_NAME = "localhost"#gethostbyname(gethostname())
 CLIENT_ADDR = (CLIENT_NAME, PORT)
@@ -46,23 +44,42 @@ def main():
             continue
         play_game(cnn)
 
+def try_udp_bind():
+    while True:
+        sock = socket(AF_INET, SOCK_DGRAM)
+        try:
+            sock.bind(CLIENT_ADDR)
+            return 
+        except:
+            sock.close()
+            print_color(COLOR_RED,"failed udp connect. trying again...")
+
 
 def look_for_server():
+    bytes_by_addr = {}
     try:
         sock = socket(AF_INET, SOCK_DGRAM)
         sock.bind(CLIENT_ADDR)
+        # while not try_udp_bind():
+        #     x=1
+
         while True:
-            data, (src_ip,src_port) = sock.recvfrom(4096)#TODO: get all bytes
-            if data:
+            #TODO: handle (1) len(data) < 7 bytes, (2)  un/packing data raise exception
+            data, (src_ip,src_port) = sock.recvfrom(UDP_MSG_LEN)#TODO: get all bytes, can raise exception?
+            l = len(data)
+            print_color(COLOR_BLUE, f"UDP read {l} from ({src_ip},{src_port})" )
+            if len(data) >= UDP_MSG_LEN:
                 cookie, code, srv_port = struct.unpack('!Ibh', data[:UDP_MSG_LEN])
                 #print(f"\tfrom: {(src_ip,src_port)}\n\tcookie: {cookie}\n\tcode: {code}\n\tsrv_port: {srv_port}" )
                 if cookie == UDP_COOKIE and code == OFFER_CODE:
                     print_color(COLOR_GREEN,"found server - closing client UDP socket")
                     sock.close()
                     return (src_ip, srv_port)
-    except:
+    except Exception as e:
+        print_color(COLOR_RED, str(e))
         print_color(COLOR_RED,"couldnt bind to port - closing client UDP socket")
         sock.close()
+        raise e
         return ("bad server",0)#TODO: handle after return
 
 def connect_to_server(srv_ip, srv_port):
@@ -137,7 +154,7 @@ def recv_and_print(cnn):
             return False
         msg = msg_bytes.decode(FORMAT)       
         if len(msg):
-            print_color(COLOR_YELLOW,"read from sock: "+ msg)
+            print_color(COLOR_YELLOW,"read from sock:\n"+ msg)
         return True
         
     finally:

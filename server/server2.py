@@ -3,28 +3,10 @@ import struct
 import threading
 import time
 import random
+from team import Team
+from colors import *
 #program constants
-COLOR_RED = "red"
-COLOR_GREEN = "green"
-COLOR_YELLOW = "yellow"
-COLOR_BLUE = "blue"
-COLOR_DEFUALT = "default"
-COLOR_SEND = COLOR_YELLOW
 
-
-COLORS = {
-    COLOR_RED:"\u001b[31m",
-    COLOR_GREEN:"\u001b[32m",
-    COLOR_YELLOW:"\u001b[33m",
-    COLOR_BLUE:"\u001b[34m",
-    COLOR_DEFUALT:"\u001b[0m"
-    }
-
-def print_color(clr, msg):
-    print(COLORS[clr]+msg+COLORS[COLOR_DEFUALT])
-
-def colorize(clr, txt):
-    return COLORS[clr]+txt+COLORS[COLOR_DEFUALT]
 
 #Client Constants
 NETWORK_PREFIX = "172."
@@ -36,14 +18,11 @@ LOCAL_HOST = "127.0.0.1"
 CLIENT_PORT = 13117
 
 #Server Constants
-UDP_HEADER = 8
-TCP_HEADER = 20
 INITIAL_OFFER_PORT = 7531
 INITIAL_LISTEN_PORT = 6421
 UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
 SERVER_NAME = gethostbyname(gethostname())
-#OFFER_ADDR = (SERVER_NAME, OFFER_PORT)
 FORMAT = 'utf-8'
 SECS_TO_WAIT = 5
 NUM_GROUPS = 2
@@ -54,10 +33,7 @@ client_dict = {}
 game_mode_event = threading.Event()
 game_over_event = threading.Event()
 
-class Team:
-    def __init__(self, name):
-        self.name = name
-        self.score = 0
+
 
 def init_fields():
     global group_addrs
@@ -110,7 +86,7 @@ def bind_to_available_port(sock, prt):
 def listen_for_clients(server_socket):
     num_clients = 0
     server_socket.listen()
-    server_socket.settimeout(1)#TODO: timeout
+    server_socket.settimeout(0.1)
     print_color( COLOR_GREEN,f"[LISTENING] Server is listening on {SERVER_NAME}")
     threads = []
     while not game_mode_event.is_set():
@@ -173,6 +149,18 @@ def recv_letter(cnn):#TODO: get whole
 def handle_message(cnn, addr, group, team, msg):
     team.score += 1
 
+def send_offers_broken_up(listen_port):#TODO: need try catch akhusharmuta
+    print_color(COLOR_GREEN,"sending offers")
+    offer_sock = socket(AF_INET, SOCK_DGRAM)
+    offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
+    msg_bytes1 = struct.pack('!Ib', UDP_COOKIE ,OFFER_CODE)
+    msg_bytes2 = struct.pack('!h', listen_port)
+    while not game_mode_event.is_set():
+        offer_sock.sendto(msg_bytes1,('localhost',CLIENT_PORT))#TODO: no local host
+        offer_sock.sendto(msg_bytes2,('localhost',CLIENT_PORT))#TODO: no local host
+        time.sleep(1.0)
+    print_color(COLOR_GREEN,"all offers sent")
+    offer_sock.close()
 
 def send_offers(listen_port):#TODO: need try catch akhusharmuta
     print_color(COLOR_GREEN,"sending offers")
@@ -184,6 +172,7 @@ def send_offers(listen_port):#TODO: need try catch akhusharmuta
         time.sleep(1.0)
     print_color(COLOR_GREEN,"all offers sent")
     offer_sock.close()
+
     # sock = socket(AF_INET, SOCK_RAW, IPPROTO_UDP)
     # length = 8+len(data);
     # checksum = 0
@@ -212,7 +201,7 @@ def game_over_msg():
             winner = grp_num
             max_score = score
         msg = msg + f"Group {grp_num+1} typed in {score} characters.\n"
-    msg += f"Group {winner} wins!\n\nCongratulations to the winners:\n=="
+    msg += f"Group {winner+1} wins!\n\nCongratulations to the winners:\n=="
     for addr in group_addrs[winner]:
         msg = msg + "\n" + client_dict[addr].name
     return msg
