@@ -88,7 +88,7 @@ def run_timer():
     game_over_event.set()
 
 ### For dev lab only ###
-def send_offers(listen_port):
+def send_offers_dev_net(listen_port):
     BROADCAST_IP = "172.1.255.255"
     #print_color(COLOR_GREEN,"sending offers")
     offer_sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
@@ -116,9 +116,21 @@ def send_offers_whole_net(listen_port):
     #print_color(COLOR_GREEN,"all offers sent")
     offer_sock.close()
 
+### local ###
+def send_offers(listen_port):
+    #print_color(COLOR_GREEN,"sending offers")
+    offer_sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
+    offer_sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
+    offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
+    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
+    while not game_mode_event.is_set():
+        offer_sock.sendto(msg_bytes, ('localhost', CLIENT_PORT))
+        time.sleep(1.0)
+    #print_color(COLOR_GREEN,"all offers sent")
+    offer_sock.close()
 
 ### local host ###
-def send_offers_local(listen_port):#TODO: need try catch akhusharmuta
+def send_offers_orig(listen_port):#TODO: need try catch akhusharmuta
     #print_color(COLOR_GREEN,"sending offers")
     offer_sock = socket(AF_INET, SOCK_DGRAM)
     offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
