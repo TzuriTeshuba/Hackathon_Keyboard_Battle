@@ -25,7 +25,7 @@ UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
 SERVER_NAME = gethostbyname(gethostname())
 FORMAT = 'utf-8'
-SECS_TO_WAIT = 5
+SECS_TO_WAIT = 10
 NUM_GROUPS = 2
 TIMEOUT = 0.5
 ACCEPT_TIMEOUT = 1.0
@@ -68,8 +68,7 @@ def main():
             except:
                 pass
             print(f"\n----\n{e}\n-------\n")
-        finally:
-            print_color(COLOR_BLUE,str(threading.enumerate()))
+            #print_color(COLOR_BLUE,str(threading.enumerate()))
     return 0
 
 
@@ -126,18 +125,6 @@ def send_offers(listen_port):
     msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
     while not game_mode_event.is_set():
         offer_sock.sendto(msg_bytes, ('localhost', CLIENT_PORT))
-        time.sleep(1.0)
-    #print_color(COLOR_GREEN,"all offers sent")
-    offer_sock.close()
-
-### local host ###
-def send_offers_orig(listen_port):#TODO: need try catch akhusharmuta
-    #print_color(COLOR_GREEN,"sending offers")
-    offer_sock = socket(AF_INET, SOCK_DGRAM)
-    offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
-    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
-    while not game_mode_event.is_set():
-        offer_sock.sendto(msg_bytes,('localhost',CLIENT_PORT))#TODO: no local host
         time.sleep(1.0)
     #print_color(COLOR_GREEN,"all offers sent")
     offer_sock.close()

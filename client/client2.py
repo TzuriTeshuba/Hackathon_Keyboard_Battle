@@ -66,11 +66,8 @@ def look_for_server():
             #TODO: handle (1) len(data) < 7 bytes, (2)  un/packing data raise exception
             data, (src_ip,src_port) = sock.recvfrom(UDP_MSG_LEN)#TODO: get all bytes, can raise exception?
             l = len(data)
-            print_color(COLOR_BLUE, f"UDP read {l} from ({src_ip},{src_port})" )
-            print_color(COLOR_YELLOW, f"({src_ip},{src_port})")
             if len(data) >= UDP_MSG_LEN:
                 cookie, code, srv_port = struct.unpack('!Ibh', data[:UDP_MSG_LEN])
-                #print(f"\tfrom: {(src_ip,src_port)}\n\tcookie: {cookie}\n\tcode: {code}\n\tsrv_port: {srv_port}" )
                 if cookie == UDP_COOKIE and code == OFFER_CODE:
                     sock.close()
                     return (src_ip, srv_port)
