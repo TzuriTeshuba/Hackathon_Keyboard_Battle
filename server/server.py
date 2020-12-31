@@ -1,4 +1,5 @@
 from socket import *
+import scapy.arch
 import struct
 import threading
 import time
@@ -9,29 +10,25 @@ from exceptions import DisconnectException, NoTeamNameException
 
 
 #Network Constants
-NETWORK_PREFIX = "172."
-DEV_NET_PREFIX = NETWORK_PREFIX+"1."
-TEST_NET_PREFIX = NETWORK_PREFIX+"99."
-CLIENT_PREFIX = DEV_NET_PREFIX
-LAST_NET_IP = 24
-LOCAL_HOST = "127.0.0.1"
 CLIENT_PORT = 13117
-BROADCAST_IP = "172.1.255.255"
-
-
-#Server Constants
+DEV_BROADCAST_IP = "172.1.255.255"
+TEST_BROADCAST_IP = "172.99.255.255"
+BROADCAST_IP = DEV_BROADCAST_IP
 INITIAL_OFFER_PORT = 7531
 INITIAL_LISTEN_PORT = 6421
+SERVER_IP = scapy.arch.get_if_addr("eth1")
+
+
+#Program Constants
 UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
-SERVER_NAME = gethostbyname(gethostname())
 TIMEOUT = 0.0
 ACCEPT_TIMEOUT = 1.0
 OFFER_DELAY = 1
-
-#Program constants
 TEAM_NAME_SUFFIX = "\n"
-FORMAT = 'utf-8'
+UTF_8_FORMAT = 'utf-8'
+UDP_PACK_FORMAT = '!Ibh'
+
 SECS_TO_WAIT = 4
 NUM_GROUPS = 2
 GAME_MODE_EVENT = threading.Event()
@@ -56,14 +53,14 @@ def init_fields():
 def main():
     while True:
         try:
-            print_color(COLOR_GREEN,f"Server started, listening on IP address {SERVER_NAME}")
+            print_color(COLOR_GREEN,f"Server started, listening on IP address {SERVER_IP}")
             init_fields()
             server_socket = socket(AF_INET, SOCK_STREAM)
             listen_port = bind_to_available_port(server_socket,INITIAL_LISTEN_PORT)
             threads = [
                 threading.Thread(target=run_timer, name="TIMER_THREAD", args=()),
                 threading.Thread(target=listen_for_clients, name="LISTEN_THREAD", args=[server_socket]),
-                threading.Thread(target=send_offers, name="OFFER_THREAD", args=[listen_port])
+                threading.Thread(target=send_offers_broadcast, name="OFFER_THREAD", args=[listen_port])
             ]
             for t in threads:
                 t.start()
@@ -81,7 +78,7 @@ def main():
 def bind_to_available_port(sock, prt):
     while True:
         try:
-            sock.bind((SERVER_NAME, prt))
+            sock.bind((SERVER_IP, prt))
             return prt
         except:
             prt += 1
@@ -95,36 +92,25 @@ def run_timer():
     GAME_OVER_EVENT.set()
 
 # sends offer message to dev network to connect to port @listen_port
+# NOT CURRENTLY IN USE- FOR TESTING PURPOSES
 def send_offers_dev(listen_port):
     offer_sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
     offer_sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
     offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
-    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
+    msg_bytes = struct.pack(UDP_PACK_FORMAT, UDP_COOKIE ,OFFER_CODE,listen_port)
     while not GAME_MODE_EVENT.is_set():
-        for i in range(0,LAST_NET_IP+1):
-            offer_sock.sendto(msg_bytes, (DEV_NET_PREFIX + str(i), CLIENT_PORT))
-            time.sleep(OFFER_DELAY)
-    offer_sock.close()
-
-# sends offer broadcast to current network to connect to port @listen_port
-def send_offers_net(listen_port):
-    offer_sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
-    offer_sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
-    offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
-    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
-    while not GAME_MODE_EVENT.is_set():
-        offer_sock.sendto(msg_bytes, ('<broadcast>', CLIENT_PORT))
+        offer_sock.sendto(msg_bytes, (BROADCAST_IP, CLIENT_PORT))
         time.sleep(OFFER_DELAY)
     offer_sock.close()
 
-# sends offer message to local host (TESTING PURPOSES) to connect to port @listen_port
-def send_offers(listen_port):
+# sends offer broadcast to current network to connect to port @listen_port
+def send_offers_broadcast(listen_port):
     offer_sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
     offer_sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
     offer_port = bind_to_available_port(offer_sock,INITIAL_OFFER_PORT)
-    msg_bytes = struct.pack('!Ibh', UDP_COOKIE ,OFFER_CODE,listen_port)
+    msg_bytes = struct.pack(UDP_PACK_FORMAT, UDP_COOKIE ,OFFER_CODE,listen_port)
     while not GAME_MODE_EVENT.is_set():
-        offer_sock.sendto(msg_bytes, ('localhost', CLIENT_PORT))
+        offer_sock.sendto(msg_bytes, ('<broadcast>', CLIENT_PORT))
         time.sleep(OFFER_DELAY)
     offer_sock.close()
 
@@ -203,7 +189,7 @@ def flush_socket(cnn,team):
 def recv_letter(cnn):
     msg = ""
     try:
-        msg = cnn.recv(1).decode(FORMAT)
+        msg = cnn.recv(1).decode(UTF_8_FORMAT)
         if len(msg):
             return msg
     except:

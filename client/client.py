@@ -1,4 +1,5 @@
 from socket import *
+import scapy.arch
 import struct
 import time
 import tty
@@ -7,17 +8,20 @@ import select
 from colors import *
 from exceptions import DisconnectException
 
-
-TEAM_NAME = "Not You"
+#Network Constants
 PORT = 13117
-CLIENT_NAME = "localhost" #gethostbyname(gethostname())
-CLIENT_ADDR = (CLIENT_NAME, PORT)
+CLIENT_IP = scapy.arch.get_if_addr("eth1")
+CLIENT_ADDR = (CLIENT_IP, PORT)
+
+#Program Constants
+TEAM_NAME = "Not You"
+NAME_SUFFIX = "\n"
 UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
 UDP_MSG_LEN = 7
-FORMAT = 'utf-8'
+UDP_PACK_FORMAT = '!Ibh'
+UTF_8_FORMAT = 'utf-8'
 TIMEOUT = 0.0
-NAME_SUFFIX = "\n"
  
 
 # forever - looks for server, connects, and plays game until server disconnects
@@ -41,12 +45,13 @@ def look_for_server():
     try:
         sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
         sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
+        sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
         sock.bind(CLIENT_ADDR)
         while True:
             data, (src_ip,src_port) = sock.recvfrom(UDP_MSG_LEN)
             l = len(data)
             if len(data) >= UDP_MSG_LEN:
-                cookie, code, srv_port = struct.unpack('!Ibh', data[:UDP_MSG_LEN])
+                cookie, code, srv_port = struct.unpack(UDP_PACK_FORMAT, data[:UDP_MSG_LEN])
                 if cookie == UDP_COOKIE and code == OFFER_CODE:
                     sock.close()
                     return (src_ip, srv_port)
@@ -120,7 +125,7 @@ def send_msg(cnn,msg):
 # socket * string -> None
 def send_char(cnn, c):
     try:
-        msg_bytes = c.encode(FORMAT)
+        msg_bytes = c.encode(UTF_8_FORMAT)
         cnn.send(msg_bytes)
     except:
         raise DisconnectException
@@ -132,7 +137,7 @@ def recv_and_print(cnn):
     msg = ""
     try:
         msg_bytes = cnn.recv(1024)
-        msg = msg_bytes.decode(FORMAT)       
+        msg = msg_bytes.decode(UTF_8_FORMAT)       
         if len(msg):
             print_color(COLOR_YELLOW,msg)
             return
