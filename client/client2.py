@@ -4,38 +4,23 @@ import time
 import tty
 import sys
 import select
+from colors import *
+from exceptions import DisconnectException
 
 
 TEAM_NAME = "Not You"
 PORT = 13117
-CLIENT_NAME = "localhost" #gethostbyname(gethostname())#"localhost"
+CLIENT_NAME = "localhost" #gethostbyname(gethostname())
 CLIENT_ADDR = (CLIENT_NAME, PORT)
 UDP_COOKIE = 0xfeedbeef
 OFFER_CODE = 0x2
 UDP_MSG_LEN = 7
 FORMAT = 'utf-8'
-TIMEOUT = 0.5
-INACTIVE_ITERS_TOLERANCE = 100000
-BAD_IP = "Bad IP" 
+TIMEOUT = 0.0
+NAME_SUFFIX = "\n"
+ 
 
-### COLORS ###
-COLOR_RED = "red"
-COLOR_GREEN = "green"
-COLOR_YELLOW = "yellow"
-COLOR_BLUE = "blue"
-COLOR_DEFUALT = "default"
-
-COLORS = {
-    COLOR_RED:"\u001b[31m",
-    COLOR_GREEN:"\u001b[32m",
-    COLOR_YELLOW:"\u001b[33m",
-    COLOR_BLUE:"\u001b[34m",
-    COLOR_DEFUALT:"\u001b[0m"
-    }
-
-def print_color(clr, msg):
-    print(COLORS[clr]+msg+COLORS[COLOR_DEFUALT])
-
+# forever - looks for server, connects, and plays game until server disconnects
 def main():
     while True:
         print_color(COLOR_GREEN,"Client started, listening for offer requests...")
@@ -47,24 +32,18 @@ def main():
             continue
         play_game(cnn)
 
-def try_udp_bind():
-    while True:
-        sock = socket(AF_INET, SOCK_DGRAM)
-        try:
-            sock.bind(CLIENT_ADDR)
-            return 
-        except:
-            sock.close()
-            print_color(COLOR_RED,"failed udp connect. trying again...")
 
+# binds UDP socket and listens for offer messages from servers
+# if succeeds @returns the server IP and port it is listening on
+# if fails, sleeps one second and return (None, 0)
+# None -> (string | None) * int
 def look_for_server():
     try:
         sock = socket(AF_INET, SOCK_DGRAM,IPPROTO_UDP)
         sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
-        sock.bind(CLIENT_ADDR)#TODO: handle exception!!
+        sock.bind(CLIENT_ADDR)
         while True:
-            #TODO: handle (1) len(data) < 7 bytes, (2)  un/packing data raise exception
-            data, (src_ip,src_port) = sock.recvfrom(UDP_MSG_LEN)#TODO: get all bytes, can raise exception?
+            data, (src_ip,src_port) = sock.recvfrom(UDP_MSG_LEN)
             l = len(data)
             if len(data) >= UDP_MSG_LEN:
                 cookie, code, srv_port = struct.unpack('!Ibh', data[:UDP_MSG_LEN])
@@ -73,75 +52,93 @@ def look_for_server():
                     return (src_ip, srv_port)
     except Exception as e:
         print_color(COLOR_RED, str(e))
-        print_color(COLOR_RED,"couldnt bind to port - closing client UDP socket")
+        print_color(COLOR_RED,"couldnt bind to port - closing client UDP socket, trying again in 1 sec")
         sock.close()
-        return None
+        time.sleep(1)
+        return (None, 0)
 
+# connects (TCP) to address at (@arv_ip, @srv_port)
+# if succesful @returns the connection socket
+# if fails @returns None
+# string * int -> socket | None
 def connect_to_server(srv_ip, srv_port):
     print_color(COLOR_GREEN,f"received offer from {srv_ip}, attempting to connect...")
     try:
         srv_adrs = (srv_ip,srv_port)
-        cnn = socket(AF_INET, SOCK_STREAM)#TODO: filter message types?
+        cnn = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
         cnn.connect(srv_adrs) 
-        print_color(COLOR_GREEN,"connected!")
         return cnn
     except Exception as e:
         print_color(COLOR_RED,"failed to connect to server")
         cnn.close()
         return None
 
+# (1) sets socket to non-blocking
+# (2) sends team name to server @cnn
+# (3) until server disconnects, non-blokingly receives data from @cnn and keyboard
+#     and sends data from keyboard to @cnn
+# socket -> None
 def play_game(cnn):
-    print_color(COLOR_GREEN, "Playing game")
     try:
-        send_msg(cnn, TEAM_NAME+"\n")
         cnn.settimeout(TIMEOUT)
-        tty.setcbreak(sys.stdin)
+        send_msg(cnn, TEAM_NAME+NAME_SUFFIX)
+        tty.setcbreak(sys.stdin)#receive from keyboard on press (without enter)
         while True:
-            if not recv_and_print(cnn):
-                print_color(COLOR_GREEN, "The server closed the connection, game over")
-                break
+            recv_and_print(cnn)            
             c = get_char()
-            if len(c) and (not send_char(cnn,c)):
-                break
+            if len(c):
+                send_char(cnn,c)                
+    except DisconnectException:
+        print_color(COLOR_GREEN, "the server has closed the connection. game over.")            
     except Exception as e:
-        print_color(COLOR_RED,"\n--------\nin play_game:\n"+str(e))
+        pass
     finally:
         cnn.close()
 
-
+# non-blockingly @returns a character from the keyboard if a key was pressed
+# @returns "" if no key was pressed
+# None -> string
 def get_char():
     c = ""
     if select.select([sys.stdin],[],[],0)[0]:
         c = sys.stdin.read(1)
     return c
 
+# sends @msg to @cnn
+# raises DisconnectException if @cnn has disconnected
+# socket * string -> None
 def send_msg(cnn,msg):
     try:
         msg_bytes = struct.pack(f"! {len(msg)}s",msg.encode())
         cnn.send(msg_bytes)
     except:
-        return False
+        raise DisconnectException
 
+# sends @c to @cnn
+# raises DisconnectException if @cnn has disconnected
+# same as send_msg but more efficient for single chars
+# socket * string -> None
 def send_char(cnn, c):
     try:
         msg_bytes = c.encode(FORMAT)
         cnn.send(msg_bytes)
-        return True
     except:
-        return False
+        raise DisconnectException
 
+# receives data from @cnn and prints it on screen in yellow
+# raises DisconnectException if @cnn has disconnected
+# socket -> None
 def recv_and_print(cnn):
     msg = ""
     try:
-        msg_bytes = cnn.recv(4096)
+        msg_bytes = cnn.recv(1024)
         msg = msg_bytes.decode(FORMAT)       
         if len(msg):
-            print_color(COLOR_YELLOW,"read from sock:\n"+ msg)
-            return True
-        else:
-            return False
+            print_color(COLOR_YELLOW,msg)
+            return
     except Exception as e:
-        return True
+        return
+    raise DisconnectException
 
 
 if __name__ == "__main__":
